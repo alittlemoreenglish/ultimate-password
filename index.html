@@ -1,0 +1,56 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ultimate Password</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Ultimate Password</h1>
+    <div id="game-setup">
+      <div class="setup-grid">
+        <div class="setup-input">
+          <label for="min-range">Min Range:</label>
+          <input type="number" id="min-range" value="0">
+        </div>
+        
+        <div class="setup-input">
+          <label for="max-range">Max Range:</label>
+          <input type="number" id="max-range" value="100">
+        </div>
+        
+        <div class="setup-input player-count-center">
+          <label for="player-count">Number of Players:</label>
+          <input type="number" id="player-count" min="2" value="2">
+        </div>
+      </div>
+      
+      <button id="start-game">Start Game</button>
+    </div>
+
+    <div id="game-area" class="hidden">
+      <div id="loading-overlay" class="hidden">
+        <div class="loading-spinner"></div>
+        <p>Generating Player Avatars...</p>
+      </div>
+
+      <div id="current-player-info" class="player-banner">
+        <div class="player-avatar" id="current-player-avatar"></div>
+        <h2><span id="current-player-name"></span></h2>
+      </div>
+      
+      <div id="range-info">
+        <p id="current-range">Current Range: 0 - 100</p>
+      </div>
+      
+      <div id="guess-section">
+        <input type="number" id="guess-input" placeholder="Enter your guess">
+        <button id="submit-guess">Submit Guess</button>
+      </div>
+      
+      <div id="game-feedback" class="feedback-box"></div>
+    </div>
+  </div>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
