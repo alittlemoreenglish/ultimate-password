@@ -14,6 +14,14 @@ class SecretNumberGame {
     this.initializeEventListeners();
   }
 
+  initializeEventListeners() {
+    document.getElementById('start-game').addEventListener('click', () => this.startGame());
+    document.getElementById('submit-guess').addEventListener('click', () => this.processGuess());
+    document.getElementById('guess-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.processGuess();
+    });
+  }
+
   async generateAvatar(seed) {
     try {
       const pokemonId = Math.floor(Math.random() * 898) + 1;
@@ -50,17 +58,130 @@ class SecretNumberGame {
     return availableNumbers[randomIndex];
   }
 
-  generateSecretNumber(min, max) {
-    // 確保密碼不能是範圍的上限和下限
-    const availableNumbers = [];
-    for (let i = min + 1; i < max; i++) {
-      availableNumbers.push(i);
-    }
-    const randomIndex = Math.floor(Math.random() * availableNumbers.length);
-    return availableNumbers[randomIndex];
+  getColorPaletteFromSprite(spriteUrl) {
+    const colors = [
+      '#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', 
+      '#6C5CE7', '#A8E6CF', '#FF8ED4', '#FAD390'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
   }
 
-  showCelebrationMessage(winningPlayer) {
+  async startGame() {
+    this.minRange = parseInt(document.getElementById('min-range').value);
+    this.maxRange = parseInt(document.getElementById('max-range').value);
+    this.playerCount = parseInt(document.getElementById('player-count').value);
+
+    this.showLoadingOverlay();
+
+    // 生成密碼，確保不是範圍的上限和下限
+    this.secretNumber = this.generateSecretNumber(this.minRange, this.maxRange);
+    
+    // 重置玩家和頭像陣列
+    this.players = [];
+    this.playerAvatars = [];
+    this.avatarLoadPromises = [];
+    
+    for (let i = 0; i < this.playerCount; i++) {
+      this.players.push(`Player ${i + 1}`);
+      const avatarPromise = this.generateAvatar(i);
+      this.avatarLoadPromises.push(avatarPromise);
+    }
+    
+    try {
+      this.playerAvatars = await Promise.all(this.avatarLoadPromises);
+      
+      // 設置初始遊戲範圍
+      this.currentMinRange = this.minRange;
+      this.currentMaxRange = this.maxRange;
+
+      document.getElementById('game-setup').classList.add('hidden');
+      document.getElementById('game-area').classList.remove('hidden');
+
+      this.currentPlayerIndex = 0;
+      this.updateCurrentPlayerDisplay();
+      this.updateRangeDisplay();
+
+      document.getElementById('game-feedback').textContent = 
+        `Game started! Please choose a number between ${this.currentMinRange + 1} and ${this.currentMaxRange - 1}`;
+    } catch (error) {
+      console.error('Error loading avatars:', error);
+      document.getElementById('game-feedback').textContent = 'Error starting game. Please try again.';
+    } finally {
+      this.hideLoadingOverlay();
+    }
+  }
+
+  processGuess() {
+    const guessInput = document.getElementById('guess-input');
+    const guess = parseInt(guessInput.value);
+    const feedbackElement = document.getElementById('game-feedback');
+
+    // 驗證猜測：不能選擇範圍的上限和下限
+    if (
+      isNaN(guess) || 
+      guess <= this.currentMinRange || 
+      guess >= this.currentMaxRange
+    ) {
+      feedbackElement.textContent = 
+        `Please enter a valid number between ${this.currentMinRange + 1} and ${this.currentMaxRange - 1}`;
+      return;
+    }
+
+    if (guess === this.secretNumber) {
+      // 猜中密碼，該玩家輸了
+      this.showCelebrationMessage(this.players[this.currentPlayerIndex]);
+    } else if (guess < this.secretNumber) {
+      // 更新最小範圍
+      this.currentMinRange = guess;
+      feedbackElement.textContent = 
+        `Too low! The number is between ${guess} and ${this.currentMaxRange - 1}`;
+      this.updateRangeDisplay();
+      this.nextPlayer();
+    } else {
+      // 更新最大範圍
+      this.currentMaxRange = guess;
+      feedbackElement.textContent = 
+        `Too high! The number is between ${this.currentMinRange + 1} and ${guess}`;
+      this.updateRangeDisplay();
+      this.nextPlayer();
+    }
+
+    guessInput.value = '';
+    guessInput.focus();
+  }
+
+  updateRangeDisplay() {
+    document.getElementById('current-range').textContent = 
+      `Current Range: ${this.currentMinRange} - ${this.currentMaxRange}`;
+  }
+
+  updateCurrentPlayerDisplay() {
+    const playerNameElement = document.getElementById('current-player-name');
+    const playerBanner = document.getElementById('current-player-info');
+    const playerAvatarElement = document.getElementById('current-player-avatar');
+    
+    playerBanner.className = 'player-banner';
+    playerBanner.classList.add(`player-banner-${this.currentPlayerIndex + 1}`);
+    
+    playerNameElement.textContent = this.players[this.currentPlayerIndex];
+    
+    const currentAvatar = this.playerAvatars[this.currentPlayerIndex];
+    
+    if (currentAvatar.sprite) {
+      playerAvatarElement.innerHTML = `<img src="${currentAvatar.sprite}" alt="${currentAvatar.name}" style="max-width: 100%; max-height: 100%;">`;
+      playerAvatarElement.style.backgroundColor = currentAvatar.colors;
+    } else {
+      playerAvatarElement.textContent = currentAvatar.emoji;
+      playerAvatarElement.style.backgroundColor = currentAvatar.color;
+    }
+  }
+
+  nextPlayer() {
+    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.playerCount;
+    this.updateCurrentPlayerDisplay();
+  }
+
+  showCelebrationMessage(losingPlayer) {
     const celebrationContainer = document.createElement('div');
     celebrationContainer.style.position = 'fixed';
     celebrationContainer.style.top = '0';
@@ -122,7 +243,6 @@ class SecretNumberGame {
     celebrationContainer.appendChild(confettiContainer);
     document.body.appendChild(celebrationContainer);
     
-    // Remove celebration after 5 seconds
     setTimeout(() => {
       document.body.removeChild(celebrationContainer);
       this.resetGame();
@@ -139,6 +259,10 @@ class SecretNumberGame {
     loadingOverlay.classList.add('hidden');
   }
 
+  resetGame() {
+    document.getElementById('game-area').classList.add('hidden');
+    document.getElementById('game-setup').classList.remove('hidden');
+  }
 }
 
 // Initialize the game
