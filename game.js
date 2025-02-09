@@ -25,8 +25,27 @@ class SecretNumberGame {
   async generateAvatar(seed) {
     try {
       const pokemonId = Math.floor(Math.random() * 898) + 1;
-      const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonId}`);
+      
+      // Add timeout to the fetch request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+      const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonId}`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error('Pokemon API response not ok');
+      }
+
       const pokemonData = await response.json();
+      
+      // Verify sprite URL exists
+      if (!pokemonData.sprites?.front_default) {
+        throw new Error('No sprite available');
+      }
 
       return {
         name: pokemonData.name,
@@ -35,35 +54,19 @@ class SecretNumberGame {
       };
     } catch (error) {
       console.error('Failed to fetch Pokémon:', error);
+      // Fallback to emoji avatar
       const emojis = ['🤠', '🚀', '🌟', '🍄', '🎲', '🌈', '🍦', '🐸', '🤖', '🍩'];
       const colors = [
         '#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', 
         '#6C5CE7', '#A8E6CF', '#FF8ED4', '#FAD390'
       ];
 
-      const emoji = emojis[seed % emojis.length];
-      const color = colors[seed % colors.length];
-
-      return { emoji, color };
+      return {
+        name: `Player ${seed + 1}`,
+        emoji: emojis[seed % emojis.length],
+        color: colors[seed % colors.length]
+      };
     }
-  }
-
-  generateSecretNumber(min, max) {
-    // 確保密碼不能是範圍的上限和下限
-    const availableNumbers = [];
-    for (let i = min + 1; i < max; i++) {
-      availableNumbers.push(i);
-    }
-    const randomIndex = Math.floor(Math.random() * availableNumbers.length);
-    return availableNumbers[randomIndex];
-  }
-
-  getColorPaletteFromSprite(spriteUrl) {
-    const colors = [
-      '#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', 
-      '#6C5CE7', '#A8E6CF', '#FF8ED4', '#FAD390'
-    ];
-    return colors[Math.floor(Math.random() * colors.length)];
   }
 
   async startGame() {
@@ -73,38 +76,62 @@ class SecretNumberGame {
 
     this.showLoadingOverlay();
 
-    // 生成密碼，確保不是範圍的上限和下限
     this.secretNumber = this.generateSecretNumber(this.minRange, this.maxRange);
     
-    // 重置玩家和頭像陣列
+    // Reset arrays
     this.players = [];
     this.playerAvatars = [];
     this.avatarLoadPromises = [];
     
-    for (let i = 0; i < this.playerCount; i++) {
-      this.players.push(`Player ${i + 1}`);
-      const avatarPromise = this.generateAvatar(i);
-      this.avatarLoadPromises.push(avatarPromise);
-    }
-    
+    // Create a promise that resolves after 10 seconds as a fallback
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(null);
+      }, 10000); // 10 second timeout
+    });
+
     try {
+      // Generate all avatars with a maximum total time of 10 seconds
+      for (let i = 0; i < this.playerCount; i++) {
+        this.players.push(`Player ${i + 1}`);
+        const avatarPromise = Promise.race([
+          this.generateAvatar(i),
+          timeoutPromise
+        ]);
+        this.avatarLoadPromises.push(avatarPromise);
+      }
+
+      // Wait for all avatars or timeouts
       this.playerAvatars = await Promise.all(this.avatarLoadPromises);
       
-      // 設置初始遊戲範圍
+      // Replace any null results (from timeout) with emoji fallbacks
+      this.playerAvatars = this.playerAvatars.map((avatar, index) => {
+        if (!avatar) {
+          const emojis = ['🤠', '🚀', '🌟', '🍄', '🎲', '🌈', '🍦', '🐸', '🤖', '🍩'];
+          const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FDCB6E', '#6C5CE7'];
+          return {
+            name: `Player ${index + 1}`,
+            emoji: emojis[index % emojis.length],
+            color: colors[index % colors.length]
+          };
+        }
+        return avatar;
+      });
+
+      // Set up game state
       this.currentMinRange = this.minRange;
       this.currentMaxRange = this.maxRange;
 
+      // Update UI
       document.getElementById('game-setup').classList.add('hidden');
       document.getElementById('game-area').classList.remove('hidden');
-
       this.currentPlayerIndex = 0;
       this.updateCurrentPlayerDisplay();
       this.updateRangeDisplay();
-
       document.getElementById('game-feedback').textContent = 
         `Game started! Please choose a number between ${this.currentMinRange + 1} and ${this.currentMaxRange - 1}`;
     } catch (error) {
-      console.error('Error loading avatars:', error);
+      console.error('Error during game setup:', error);
       document.getElementById('game-feedback').textContent = 'Error starting game. Please try again.';
     } finally {
       this.hideLoadingOverlay();
